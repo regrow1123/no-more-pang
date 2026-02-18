@@ -12,58 +12,18 @@ interface SearchResult {
   category: string;
 }
 
-type InputMode = "url" | "text";
-
 export default function Home() {
-  const [mode, setMode] = useState<InputMode>("url");
-  const [url, setUrl] = useState("");
   const [query, setQuery] = useState("");
+  const [coupangPrice, setCoupangPrice] = useState<string>("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [coupangPrice, setCoupangPrice] = useState<number | null>(null);
-  const [coupangTitle, setCoupangTitle] = useState("");
-  const [coupangImage, setCoupangImage] = useState("");
-  const [parsing, setParsing] = useState(false);
 
-  const parseCoupangUrl = async () => {
-    if (!url.includes("coupang.com")) {
-      setError("쿠팡 URL을 입력해주세요");
-      return;
-    }
+  const coupangPriceNum = coupangPrice ? Number(coupangPrice) : null;
 
-    setParsing(true);
-    setError("");
-
-    try {
-      const res = await fetch(
-        `/api/parse-coupang?url=${encodeURIComponent(url)}`
-      );
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "파싱 실패");
-        return;
-      }
-
-      setCoupangTitle(data.productName);
-      setCoupangPrice(data.price);
-      setCoupangImage(data.image);
-      setQuery(data.productName);
-
-      // Auto-search
-      await searchProducts(data.productName);
-    } catch {
-      setError("서버 오류가 발생했습니다");
-    } finally {
-      setParsing(false);
-    }
-  };
-
-  const searchProducts = async (searchQuery?: string) => {
-    const q = searchQuery || query;
-    if (!q) {
-      setError("검색어를 입력해주세요");
+  const searchProducts = async () => {
+    if (!query.trim()) {
+      setError("상품명을 입력해주세요");
       return;
     }
 
@@ -72,7 +32,7 @@ export default function Home() {
     setResults([]);
 
     try {
-      const res = await fetch(`/api/search?query=${encodeURIComponent(q)}`);
+      const res = await fetch(`/api/search?query=${encodeURIComponent(query.trim())}`);
       const data = await res.json();
 
       if (!res.ok) {
@@ -91,141 +51,86 @@ export default function Home() {
     }
   };
 
-  const handleSearch = () => {
-    if (mode === "url") {
-      parseCoupangUrl();
-    } else {
-      searchProducts();
-    }
-  };
-
   const formatPrice = (price: number) =>
     price.toLocaleString("ko-KR") + "원";
 
   const savings = (price: number) => {
-    if (!coupangPrice) return null;
-    const diff = coupangPrice - price;
-    if (diff <= 0) return null;
-    return diff;
+    if (!coupangPriceNum || coupangPriceNum <= price) return null;
+    return coupangPriceNum - price;
   };
 
   const savingsPercent = (price: number) => {
-    if (!coupangPrice || coupangPrice <= price) return null;
-    return Math.round(((coupangPrice - price) / coupangPrice) * 100);
+    if (!coupangPriceNum || coupangPriceNum <= price) return null;
+    return Math.round(((coupangPriceNum - price) / coupangPriceNum) * 100);
   };
+
+  const cheaperCount = results.filter(
+    (r) => coupangPriceNum && r.price < coupangPriceNum
+  ).length;
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
       {/* Header */}
-      <header className="border-b border-gray-800 px-6 py-4">
-        <h1 className="text-2xl font-bold">
+      <header className="border-b border-gray-800 px-6 py-5">
+        <h1 className="text-3xl font-bold tracking-tight">
           🚫 No More <span className="text-red-500">Pang</span>
         </h1>
         <p className="text-gray-400 text-sm mt-1">
-          쿠팡보다 더 싸게 살 수 있는 곳을 찾아드립니다
+          쿠팡에서 본 그 상품, 다른 데서 더 싸게 사세요
         </p>
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-10">
-        {/* Mode Toggle */}
-        <div className="flex gap-2 mb-4">
-          <button
-            onClick={() => setMode("url")}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-              mode === "url"
-                ? "bg-red-600 text-white"
-                : "bg-gray-800 text-gray-400 hover:text-white"
-            }`}
-          >
-            🔗 쿠팡 URL
-          </button>
-          <button
-            onClick={() => setMode("text")}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-              mode === "text"
-                ? "bg-red-600 text-white"
-                : "bg-gray-800 text-gray-400 hover:text-white"
-            }`}
-          >
-            🔍 상품명 검색
-          </button>
-        </div>
-
-        {/* Input */}
-        <div className="flex gap-3">
-          <input
-            type="text"
-            value={mode === "url" ? url : query}
-            onChange={(e) =>
-              mode === "url"
-                ? setUrl(e.target.value)
-                : setQuery(e.target.value)
-            }
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            placeholder={
-              mode === "url"
-                ? "쿠팡 상품 URL을 붙여넣으세요"
-                : "상품명을 입력하세요 (예: 에어팟 프로 2)"
-            }
-            className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition"
-          />
-          <button
-            onClick={handleSearch}
-            disabled={loading || parsing}
-            className="bg-red-600 hover:bg-red-700 disabled:bg-gray-700 px-6 py-3 rounded-lg font-medium transition whitespace-nowrap"
-          >
-            {parsing ? "파싱 중..." : loading ? "검색 중..." : "검색"}
-          </button>
-        </div>
-
-        {/* Coupang Product Card */}
-        {coupangTitle && (
-          <div className="mt-6 bg-gray-900 border border-gray-700 rounded-lg p-4">
-            <p className="text-xs text-gray-500 mb-2">쿠팡 상품</p>
-            <div className="flex gap-4 items-center">
-              {coupangImage && (
-                <img
-                  src={coupangImage}
-                  alt={coupangTitle}
-                  className="w-16 h-16 object-cover rounded-md"
-                />
-              )}
-              <div className="flex-1 min-w-0">
-                <h3 className="font-medium text-white truncate">
-                  {coupangTitle}
-                </h3>
-                {coupangPrice && (
-                  <p className="text-gray-400 mt-1">
-                    쿠팡 가격:{" "}
-                    <span className="text-white font-semibold">
-                      {formatPrice(coupangPrice)}
-                    </span>
-                  </p>
-                )}
-              </div>
+        {/* Search Section */}
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              쿠팡에서 본 상품명
+            </label>
+            <p className="text-xs text-gray-500 mb-2">
+              💡 쿠팡 상품 페이지에서 상품명을 복사해서 붙여넣으세요
+            </p>
+            <div className="flex gap-3">
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && searchProducts()}
+                placeholder="예: Apple 에어팟 프로 2세대 USB-C"
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition"
+              />
+              <button
+                onClick={searchProducts}
+                disabled={loading}
+                className="bg-red-600 hover:bg-red-700 disabled:bg-gray-700 px-6 py-3 rounded-lg font-medium transition whitespace-nowrap"
+              >
+                {loading ? "검색 중..." : "더 싼 곳 찾기"}
+              </button>
             </div>
           </div>
-        )}
 
-        {/* Manual price input for text mode */}
-        {mode === "text" && (
-          <div className="mt-4">
-            <label className="block text-sm text-gray-400 mb-2">
-              쿠팡 가격 (선택 — 입력하면 절약 금액 표시)
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              쿠팡 가격 <span className="text-gray-500 font-normal">(선택)</span>
             </label>
             <input
-              type="number"
-              value={coupangPrice ?? ""}
-              onChange={(e) =>
-                setCoupangPrice(
-                  e.target.value ? Number(e.target.value) : null
-                )
-              }
-              placeholder="쿠팡에서의 가격 (원)"
-              className="w-64 bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition"
+              type="text"
+              inputMode="numeric"
+              value={coupangPrice}
+              onChange={(e) => {
+                const v = e.target.value.replace(/[^0-9]/g, "");
+                setCoupangPrice(v);
+              }}
+              placeholder="쿠팡에서의 가격 입력 → 절약 금액 계산"
+              className="w-72 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition"
             />
+            {coupangPriceNum && (
+              <span className="ml-3 text-gray-400 text-sm">
+                쿠팡: {formatPrice(coupangPriceNum)}
+              </span>
+            )}
           </div>
-        )}
+        </div>
 
         {/* Error */}
         {error && (
@@ -237,20 +142,37 @@ export default function Home() {
         {/* Results */}
         {results.length > 0 && (
           <div className="mt-8 space-y-4">
-            <h2 className="text-lg font-semibold text-gray-300">
-              🛒 다른 곳에서 찾은 가격 ({results.length}개)
-            </h2>
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-lg font-semibold text-gray-300">
+                🛒 검색 결과 ({results.length}개)
+              </h2>
+              {coupangPriceNum && cheaperCount > 0 && (
+                <span className="text-sm text-emerald-400 font-medium">
+                  ✅ {cheaperCount}개가 쿠팡보다 저렴!
+                </span>
+              )}
+            </div>
+
             <div className="grid gap-3">
               {results.map((item, i) => {
                 const saved = savings(item.price);
                 const pct = savingsPercent(item.price);
+                const isCheaper = coupangPriceNum && item.price < coupangPriceNum;
+                const isMoreExpensive = coupangPriceNum && item.price >= coupangPriceNum;
+
                 return (
                   <a
                     key={i}
                     href={item.link}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex gap-4 bg-gray-900 border border-gray-800 rounded-lg p-4 hover:border-gray-600 transition group"
+                    className={`flex gap-4 bg-gray-900 border rounded-lg p-4 transition group ${
+                      isCheaper
+                        ? "border-emerald-800 hover:border-emerald-600"
+                        : isMoreExpensive
+                        ? "border-gray-800 opacity-60 hover:opacity-80"
+                        : "border-gray-800 hover:border-gray-600"
+                    }`}
                   >
                     {item.image && (
                       <img
@@ -272,14 +194,22 @@ export default function Home() {
                       </p>
                     </div>
                     <div className="text-right flex-shrink-0 flex flex-col justify-center">
-                      <p className="text-lg font-bold text-emerald-400">
+                      <p
+                        className={`text-lg font-bold ${
+                          isCheaper ? "text-emerald-400" : "text-gray-300"
+                        }`}
+                      >
                         {formatPrice(item.price)}
                       </p>
-                      {saved && pct && (
+                      {saved && pct ? (
                         <p className="text-sm text-red-400 mt-1 font-medium">
                           🔥 {formatPrice(saved)} ({pct}%) 절약
                         </p>
-                      )}
+                      ) : isMoreExpensive ? (
+                        <p className="text-xs text-gray-500 mt-1">
+                          쿠팡이 더 저렴
+                        </p>
+                      ) : null}
                     </div>
                   </a>
                 );
@@ -289,7 +219,6 @@ export default function Home() {
         )}
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-gray-800 px-6 py-4 text-center text-gray-600 text-sm">
         No More Pang — 더 현명한 소비를 위해
       </footer>
