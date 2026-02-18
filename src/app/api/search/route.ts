@@ -108,10 +108,23 @@ export async function GET(request: NextRequest) {
       results = results.filter((r) => r.price <= max);
     }
 
-    // Sort: cheapest first among relevant results
-    results.sort((a, b) => a.price - b.price);
+    // Separate catalog products (productType=1) from individual sellers
+    // Catalog = Naver has verified these are the same product across sellers
+    const catalog = results.filter((r) => r.productType === "1");
+    const individual = results.filter((r) => r.productType !== "1");
 
-    return NextResponse.json({ total: data.total, results });
+    // Sort each group by price
+    catalog.sort((a, b) => a.price - b.price);
+    individual.sort((a, b) => a.price - b.price);
+
+    // Catalog first (more reliable "same product" matching), then individual
+    const sorted = [...catalog, ...individual];
+
+    return NextResponse.json({
+      total: data.total,
+      catalogCount: catalog.length,
+      results: sorted,
+    });
   } catch (error) {
     console.error("Search error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

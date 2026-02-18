@@ -203,6 +203,11 @@ export default function Home() {
                         {item.title}
                       </h3>
                       <div className="flex gap-2 mt-1 flex-wrap">
+                        {item.productType === "1" && (
+                          <span className="text-xs bg-emerald-900 text-emerald-300 px-2 py-0.5 rounded">
+                            ✓ 동일상품
+                          </span>
+                        )}
                         <span className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded">
                           {item.mallName}
                         </span>
