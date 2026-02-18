@@ -9,7 +9,9 @@ interface SearchResult {
   price: number;
   mallName: string;
   brand: string;
+  maker: string;
   category: string;
+  productType: string;
 }
 
 export default function Home() {
@@ -32,7 +34,18 @@ export default function Home() {
     setResults([]);
 
     try {
-      const res = await fetch(`/api/search?query=${encodeURIComponent(query.trim())}`);
+      // Build search URL with price range if coupang price provided
+      const params = new URLSearchParams({ query: query.trim() });
+
+      if (coupangPriceNum) {
+        // Filter: 30% below ~ 20% above coupang price
+        const minPrice = Math.floor(coupangPriceNum * 0.3);
+        const maxPrice = Math.floor(coupangPriceNum * 1.2);
+        params.set("minPrice", String(minPrice));
+        params.set("maxPrice", String(maxPrice));
+      }
+
+      const res = await fetch(`/api/search?${params.toString()}`);
       const data = await res.json();
 
       if (!res.ok) {
@@ -42,7 +55,7 @@ export default function Home() {
 
       setResults(data.results);
       if (data.results.length === 0) {
-        setError("검색 결과가 없습니다");
+        setError("검색 결과가 없습니다. 상품명을 더 구체적으로 입력해보세요.");
       }
     } catch {
       setError("서버 오류가 발생했습니다");
@@ -85,34 +98,28 @@ export default function Home() {
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              쿠팡에서 본 상품명
+              상품명
             </label>
             <p className="text-xs text-gray-500 mb-2">
-              💡 쿠팡 상품 페이지에서 상품명을 복사해서 붙여넣으세요
+              💡 모델명이나 브랜드를 포함하면 더 정확해요 (예: &quot;삼성 갤럭시 버즈3 프로&quot; &gt; &quot;무선 이어폰&quot;)
             </p>
-            <div className="flex gap-3">
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && searchProducts()}
-                placeholder="예: Apple 에어팟 프로 2세대 USB-C"
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition"
-              />
-              <button
-                onClick={searchProducts}
-                disabled={loading}
-                className="bg-red-600 hover:bg-red-700 disabled:bg-gray-700 px-6 py-3 rounded-lg font-medium transition whitespace-nowrap"
-              >
-                {loading ? "검색 중..." : "더 싼 곳 찾기"}
-              </button>
-            </div>
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && searchProducts()}
+              placeholder="쿠팡에서 본 상품명을 그대로 붙여넣으세요"
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition"
+            />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              쿠팡 가격 <span className="text-gray-500 font-normal">(선택)</span>
+              쿠팡 가격
             </label>
+            <p className="text-xs text-gray-500 mb-2">
+              입력하면 비슷한 가격대만 필터링하고, 절약 금액을 계산해줘요
+            </p>
             <input
               type="text"
               inputMode="numeric"
@@ -121,15 +128,23 @@ export default function Home() {
                 const v = e.target.value.replace(/[^0-9]/g, "");
                 setCoupangPrice(v);
               }}
-              placeholder="쿠팡에서의 가격 입력 → 절약 금액 계산"
+              placeholder="쿠팡에서의 가격 (원)"
               className="w-72 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition"
             />
             {coupangPriceNum && (
               <span className="ml-3 text-gray-400 text-sm">
-                쿠팡: {formatPrice(coupangPriceNum)}
+                {formatPrice(coupangPriceNum)}
               </span>
             )}
           </div>
+
+          <button
+            onClick={searchProducts}
+            disabled={loading}
+            className="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-700 py-3 rounded-lg font-medium transition text-lg"
+          >
+            {loading ? "검색 중..." : "🔍 더 싼 곳 찾기"}
+          </button>
         </div>
 
         {/* Error */}
@@ -144,7 +159,7 @@ export default function Home() {
           <div className="mt-8 space-y-4">
             <div className="flex items-baseline justify-between">
               <h2 className="text-lg font-semibold text-gray-300">
-                🛒 검색 결과 ({results.length}개)
+                검색 결과 ({results.length}개)
               </h2>
               {coupangPriceNum && cheaperCount > 0 && (
                 <span className="text-sm text-emerald-400 font-medium">
@@ -157,8 +172,10 @@ export default function Home() {
               {results.map((item, i) => {
                 const saved = savings(item.price);
                 const pct = savingsPercent(item.price);
-                const isCheaper = coupangPriceNum && item.price < coupangPriceNum;
-                const isMoreExpensive = coupangPriceNum && item.price >= coupangPriceNum;
+                const isCheaper =
+                  coupangPriceNum && item.price < coupangPriceNum;
+                const isMoreExpensive =
+                  coupangPriceNum && item.price >= coupangPriceNum;
 
                 return (
                   <a
@@ -170,7 +187,7 @@ export default function Home() {
                       isCheaper
                         ? "border-emerald-800 hover:border-emerald-600"
                         : isMoreExpensive
-                        ? "border-gray-800 opacity-60 hover:opacity-80"
+                        ? "border-gray-800 opacity-50 hover:opacity-70"
                         : "border-gray-800 hover:border-gray-600"
                     }`}
                   >
@@ -178,18 +195,29 @@ export default function Home() {
                       <img
                         src={item.image}
                         alt={item.title}
-                        className="w-20 h-20 object-cover rounded-md flex-shrink-0"
+                        className="w-20 h-20 object-cover rounded-md flex-shrink-0 bg-gray-800"
                       />
                     )}
                     <div className="flex-1 min-w-0">
                       <h3 className="font-medium text-white truncate group-hover:text-red-400 transition">
                         {item.title}
                       </h3>
-                      <p className="text-sm text-gray-400 mt-1">
-                        {item.mallName}
-                        {item.brand && ` · ${item.brand}`}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-0.5">
+                      <div className="flex gap-2 mt-1 flex-wrap">
+                        <span className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded">
+                          {item.mallName}
+                        </span>
+                        {item.brand && (
+                          <span className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded">
+                            {item.brand}
+                          </span>
+                        )}
+                        {item.maker && item.maker !== item.brand && (
+                          <span className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded">
+                            {item.maker}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-600 mt-1">
                         {item.category}
                       </p>
                     </div>

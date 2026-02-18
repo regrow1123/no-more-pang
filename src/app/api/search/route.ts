@@ -31,6 +31,8 @@ interface NaverSearchResponse {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("query");
+  const minPrice = searchParams.get("minPrice");
+  const maxPrice = searchParams.get("maxPrice");
 
   if (!query) {
     return NextResponse.json({ error: "query parameter is required" }, { status: 400 });
@@ -44,8 +46,18 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Build query params
+    const params = new URLSearchParams({
+      query,
+      display: "40",
+      sort: "sim", // similarity first for accurate matching
+    });
+
+    // Naver API supports price filtering via exclude parameter
+    // But we'll filter client-side for more control
+
     const res = await fetch(
-      `https://openapi.naver.com/v1/search/shop.json?query=${encodeURIComponent(query)}&display=20&sort=asc`,
+      `https://openapi.naver.com/v1/search/shop.json?${params.toString()}`,
       {
         headers: {
           "X-Naver-Client-Id": NAVER_CLIENT_ID,
@@ -63,17 +75,32 @@ export async function GET(request: NextRequest) {
 
     const data: NaverSearchResponse = await res.json();
 
-    const results = data.items.map((item) => ({
+    let results = data.items.map((item) => ({
       title: item.title.replace(/<[^>]*>/g, ""),
       link: item.link,
       image: item.image,
       price: Number(item.lprice),
       mallName: item.mallName,
       brand: item.brand,
+      maker: item.maker,
       category: [item.category1, item.category2, item.category3, item.category4]
         .filter(Boolean)
         .join(" > "),
+      productType: item.productType,
     }));
+
+    // Server-side price filtering
+    const min = minPrice ? Number(minPrice) : null;
+    const max = maxPrice ? Number(maxPrice) : null;
+    if (min !== null) {
+      results = results.filter((r) => r.price >= min);
+    }
+    if (max !== null) {
+      results = results.filter((r) => r.price <= max);
+    }
+
+    // Sort: cheapest first among relevant results
+    results.sort((a, b) => a.price - b.price);
 
     return NextResponse.json({ total: data.total, results });
   } catch (error) {
