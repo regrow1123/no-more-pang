@@ -89,6 +89,15 @@ export async function GET(request: NextRequest) {
       productType: item.productType,
     }));
 
+    // Exclude Coupang results (that's the whole point!)
+    const COUPANG_PATTERNS = ["coupang.com", "쿠팡"];
+    results = results.filter(
+      (r) =>
+        !COUPANG_PATTERNS.some(
+          (p) => r.link.includes(p) || r.mallName.includes(p)
+        )
+    );
+
     // Server-side price filtering
     const min = minPrice ? Number(minPrice) : null;
     const max = maxPrice ? Number(maxPrice) : null;
